@@ -1,6 +1,5 @@
-# BONG: Bayesian Online Natural Gradient
+# Online Generalized Variational Bayes for Sequential Decision Makign
 
-https://arxiv.org/abs/2405.19681
 
 ## Run locally
 To start the slide show:
@@ -12,11 +11,11 @@ To start the slide show:
 
 ## To build a new version
 
-Settings>Pages>Build and deployment
+Settings>Pages>Build>Deployment
   Change source to github actions
 
 Go to .github/workflows/deploy.yml
-Change line 28 to '--base /reponame/'
+Change line 31 to '--base /reponame/'
 
 For testing:
 'git commit -m "[skip actions] foo foo"`
