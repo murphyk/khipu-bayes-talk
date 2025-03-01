@@ -1,2 +1,22 @@
-# khipu-bayes-talk
-Talk at khipu.ai 2025 on "Online Generalized Variational Bayes with Applications to Sequential Decision Making"
+# BONG: Bayesian Online Natural Gradient
+
+https://arxiv.org/abs/2405.19681
+
+## Run locally
+To start the slide show:
+
+- clone this repo
+- `npm install`
+- `npm run dev` or `npx slidev`
+- visit <http://localhost:3030>
+
+## To build a new version
+
+Settings>Pages>Build and deployment
+  Change source to github actions
+
+Go to .github/workflows/deploy.yml
+Change line 28 to '--base /reponame/'
+
+For testing:
+'git commit -m "[skip actions] foo foo"`
