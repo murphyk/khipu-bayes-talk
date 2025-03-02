@@ -1,4 +1,8 @@
 ---
+zoom: 0.8
+---
+
+---
 layout: two-cols
 ---
 

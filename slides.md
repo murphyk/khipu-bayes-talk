@@ -89,13 +89,13 @@ the expected sum of losses, $\sum_t E[\ell_t]$.
 ---
 
 
-# How: Generalized Online Variational Bayes
+# How: (Generalized) Online Variational Bayes
 
 
 - Background
-  - Bayesian decision theory
+  - Sequential decision making
   - Online Bayesian inference
-  - Variational Bayes
+  - Online Variational Bayes
 - Algorithms 1: low-rank filtering using variational Bayes
 - Application 1: Bandits
 - Application 2: Bayesian optimization
@@ -121,7 +121,16 @@ and $D_{1:t-1}$ is all data available up to decision time
 
 ## Example: classification
 
-For $\ell_{01}$ loss (classification), optimal estimator
+Suppose we use 0-1 loss, where we assume cost of false positives = cost of false negatives = 1
+$$
+\begin{array}{c|cc}
+ & \hat{y}=0 & \hat{y}=1  \\ \hline
+ y=0 & 0 & \ell_{FP}  \\
+ y=1 & \ell_{FN} & 0
+ \end{array}
+$$
+
+In this case, the  optimal estimator
 uses posterior mode (MAP estimate)
 $$
 \begin{aligned}
@@ -132,14 +141,6 @@ $$
 \end{aligned}
 $$
 
-For $\ell_{01}$, we assume cost of false positives = cost of false negatives = 1
-$$
-\begin{array}{c|cc}
- & \hat{y}=0 & \hat{y}=1  \\ \hline
- y=0 & 0 & \ell_{FP}  \\
- y=1 & \ell_{FN} & 0
- \end{array}
-$$
 
 
 ---
@@ -522,11 +523,11 @@ q_{\psi^*}(\theta) &\approx p(\theta|D) \\
 &= \arg\min_{\psi} E_{q_{\psi}(\theta)}\left[ \log q_{\psi}(\theta) -
 \log ( \frac{p(\data|\theta) p_0(\theta)}{\cancel{p(\data)}} ) \right] \\
 &= \arg\min_{\psi}
-\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta)
-- \log p_0(\theta) + \log q_{\psi}(\theta) \right]}_{\text{NELBO}} \\
+E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta)
+- \log p_0(\theta) + \log q_{\psi}(\theta) \right] \\
 &= \arg\min_{\psi}
 \underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta) \right]}_{\text{ENLL}}
-+\underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
++ \underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
 \end{aligned}
 $$
 
@@ -541,9 +542,9 @@ $$
 \begin{aligned}
 q_{\psi^*}(\theta) &\approx p(\theta|D) \\
 \psi^*
-&= \arg\min_{\psi}
-\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta) \right]}_{\text{ENLL}}
-+\underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
+&= \arg\max_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ \log p(\data|\theta) \right]
+- KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{ELBO} \leq \log p(D)}
 \end{aligned}
 $$
 
@@ -591,36 +592,6 @@ NeurIPS 2024.
 Gerardo Duran-Martin, Leandro Sánchez-Betancourt, Kevin Murphy.  
 (WIP).
 
----
-
-
-## Bayes By Backprop (BBB)  <sup>1</sup>
-
-BBB
-uses multiple iterations of gradient descent (GD)
-on the ELBO objective:
-$$
-\begin{aligned}
-\psi_{i} &=
-\psi_{i-1} + \alpha 
-\nabla_{\psi_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
- L^\text{ELBO}(\psi_{i}) &=
-    E_{q_{\psi_{i}}}[
-    \log p(\data \vert \theta)]
-    -KL(q_{\psi_{i}} | p_{0})
-\end{aligned}
-$$
-It also uses a diagonal Gaussian (mean field) variational posterior,
-which is not very expressive.
-
-<Footnotes separator x>
-    <Footnote :number=1>
- "Weight Uncertainty in Neural Networks",
- Charles Blundell, Julien Cornebise, Koray Kavukcuoglu, Daan Wierstra,
- ICML 2015.
-    </Footnote>
-</Footnotes>
-
 
 ---
 
@@ -634,7 +605,7 @@ $$
 \psi_{i} &=
 \psi_{i-1} + \alpha F_{\psi_0}^{-1}
 \nabla_{\psi_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
-&= \psi_{t,i-1} + \alpha 
+&= \psi_{i-1} + \alpha 
 \nabla_{\rho_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
  L^\text{ELBO}(\psi_{i}) &=
     E_{q_{\psi_{i}}}[
@@ -692,10 +663,22 @@ but we still have  *implicit regularization* due to initialization
 at prior:
 $$
 \begin{aligned}
- L_t^\text{ELL}(\psi_{t}) &=
-    E_{q_{\psi_{t}}}[
+ L_t^\text{ELBO}(\psi_{t,0}) &=
+    E_{q_{\psi_{t,0}}(\theta_t)}[
     \log p(y_{t} \vert h_{t}(\theta_{t}))]
-    -\cancel{KL(q_{\psi_{t}} | q_{\psi_{t \vert t-1}})}
+    -\cancel{KL(q_{\psi_{t,0}} | q_{\psi_{t \vert t-1}})}
+   =
+ L_t^\text{ELL}(\psi_{t,0})
+\end{aligned}
+$$
+Hence BONG update becomes
+$$
+\begin{aligned}
+\psi_{t} &=
+\psi_{t|t-1} + \alpha F_{\psi_{t|t-1}}^{-1}
+\nabla_{\psi_{t|t-1}}  L_t^\text{ELL}(\psi_{t|t-1})
+= \psi_{t|t-1} + \alpha 
+\nabla_{\rho_{t|t-1}}  L_t^\text{ELL}(\psi_{t|t-1})
 \end{aligned}
 $$
 
@@ -719,6 +702,33 @@ NeurIPS 2024.
 ![blr](./figs/blr-bong-cartoon2.png){style="max-width: 50%" .centered}
 
 
+---
+
+
+## BONG vs Online Gradient Descent (OGD) 
+
+OGD performs a single update step following the gradient
+of the log likelihood:
+$$
+\begin{aligned}
+\theta_{t} &=
+\theta_{t-1} + \alpha 
+\nabla_{\theta_{t-1}} \log p(y_t|h(\theta_{t-1},x_t))
+\end{aligned}
+$$
+- No model of uncertainty.
+- Statistically inefficient.
+
+
+By contrast, BONG updates the variational parameters $\psi_t$ using natural gradient descent:
+$$
+\begin{aligned}
+\psi_{t} &=
+\psi_{t|t-1} + \alpha F_{\psi_{t|t-1}}^{-1}
+\nabla_{\psi_{t|t-1}}     E_{q_{\psi}(\theta_t)}[
+    \log p(y_{t} \vert h(x_t, \theta_{t}))]
+\end{aligned}
+$$
 
 ---
 
@@ -965,8 +975,6 @@ where $D_i = (s_i,a_i,r_i)$ are the observations so far.
 
 
 ---
-zoom: 0.8
----
 
 ## Upper Confidence Bound (UCB)
 
@@ -1046,10 +1054,10 @@ $$
 Global, gradient-free optmization of expensive black-box function $f^*(x)$:
 $$
 \begin{aligned}
-x^* = \arg \max_{\theta} f^*(x)
+x^* = \arg \max_{x} f^*(x)
 \end{aligned}
 $$
-where $x \in R^P$ is the input (e.g., hyper-parameters of optimizer,
+where $x \in \mathcal{X}$ is the input (e.g., hyper-parameters of model,
 or inputs to weather simulator).
 
 Equivalent to a MAB with infinite number of arms $x$,
@@ -1156,7 +1164,7 @@ Any measurement has 15% probability of taking value between -50 and 50.
 ---
 
 
-# Generalized Variational Bayesian inference <sup>1</sup>
+## Generalized Variational Bayesian inference<sup>1</sup>
 
 VI
 $$
@@ -1247,7 +1255,8 @@ W_t({\bm y}_{1:t}) = \left(1 + \frac{\|\bm y_t - \hat{\bm y}_t\|_2^2}{c^2}\right
 $$
 with $c > 0$ the soft-threshold.
 
-Downweight "unlikely" observations, to avoid overcompensating.
+Downweight "unlikely" observations, to avoid changing posterior too much.
+
 
 Provably robust --- can bound the posterior influence function (see paper).
 
