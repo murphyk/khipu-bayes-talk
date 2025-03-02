@@ -1052,29 +1052,69 @@ where $x \in R^P$ is the input (e.g., hyper-parameters of optimizer,
 or inputs to weather simulator).
 
 Equivalent to a MAB with infinite number of arms $x$,
-where $f^*$ is the unknown "reward" function,
-approximated by $f_{\theta}$.
+where $f^*$ is the unknown "reward" function.
 
-TS Algorithm for BO:
+
+----
+
+## BayesOpt using Gaussian Process + UCB
+
+We approximate posterior over functions
+$p(f|D_{1:t})$ using a Gaussian Process
+with  kernel function $K(x,x')$.
+
+Posterior predictive at step $t$:
+$$
+\begin{aligned}
+p(f(x_t)|D_{1:t-1}) &=
+N(\cdot | \mu_t(x_t), \sigma_t(x_t)) \\
+\mu_t(x_t) &=
+k_{t,1:t-1}^\intercal (K_{1:t-1,1:t-1} + \sigma^2 I)^{-1} (y_{1:t-1} - \mu_{1:t-1}) \\
+\sigma_t(x_t) &= k_{t,t} - k_{t,1:t}^\intercal
+(K_{1:t-1,1:t-1} + \sigma^2 I)^{-1} k_{t,1:t}
+\end{aligned}
+$$
+where $k_{t,1:t-1}=(K(x_t,x_1), \ldots, K(x_t,x_{1:t-1}))$,
+and $k_{t,t}=K(x_t,x_t)$.
+
+UCB rule:
+$$
+x_t = \argmax_x \mu_t(x) + c \sigma_t(x)
+$$
+
+----
+
+## BayesOpt in 1d using GP + UCB + exact Bayes
+
+
+![bandits](./figs/bo-nando.png){style="max-width: 50%" .horizontal-center}
+
+
+---
+
+##  BayesOpt using Thompson Sampling
+
+Instead of using GPs, we would like to use neural networks.
+This means
+We approximate $f^*$  by $f_{\theta}$,
+and need to perform Bayesian inference $p(\theta|D_{1:t-1})$,
+using e.g., BONG.
+
+Once we have the posterior,
+we sample parameters from it, plug them into the function,
+and then find its maximum (using gradient-based methods):
 $$
 \begin{aligned}
 \tilde{\theta}_t &\sim p(\theta|D_{1:t-1}) \\
 x_t &= \arg \max_{x}  f_{\tilde{\theta}_t}(x) \\
 D_t &= (x_t, f^*(x_t)) \\
-p(\theta|D_{1:t}) &= \text{UpdateBel}(p(\theta|D_{1:t-1}, D_t)
+p(\theta|D_{1:t}) &= \text{UpdateBel}(p(\theta|D_{1:t-1}),  D_t)
     \end{aligned}
 $$
 
 ----
 
-## BayesOpt in 1d using Gaussian Process + exact Bayes
-
-
-![bandits](./figs/bo-nando.png){style="max-width: 50%" .horizontal-center}
-
-----
-
-## BayesOpt in 1d using MLP + LRKF <sup>1</sup>
+## BayesOpt in 1d using MLP + TS + LRKF <sup>1</sup>
 
 
 ![bandits](./figs/bo-bnn-ackley.png){style="max-width: 70%" .horizontal-center}
