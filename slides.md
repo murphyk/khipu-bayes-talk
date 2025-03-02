@@ -13,6 +13,8 @@ coverDate: 2025-03-12
 
 Kevin Murphy (Google DeepMind)
 
+Special thanks for Gerardo Duran-Martin (Oxford) for many of the figures.
+
 [khipu.ai](https://khipu.ai/khipu2025/program-2025)
 
 
@@ -94,11 +96,10 @@ the expected sum of losses, $\sum_t E[\ell_t]$.
   - Bayesian decision theory
   - Online Bayesian inference
   - Variational Bayes
-  - Generalized Bayes
-- Algorithms 1: low-rank filtering
+- Algorithms 1: low-rank filtering using variational Bayes
 - Application 1: Bandits
 - Application 2: Bayesian optimization
-- Algorithms 2: robust filtering 
+- Algorithms 2: robust filtering  using generalized Bayes
 
 ---
 
@@ -171,13 +172,13 @@ State Space Model (SSM)
 Input: prior belief state $b_{t-1}=p(\theta_{t-1}|D_{1:t-1})$,
 where parameters $\theta_{t-1}$ summarize $x_i \rightarrow y_i$
 
-Goal 1: Predict next output $y_t$ given $x_t$ and $D_{1:t-1}$
+Goal 1: Predict next output $y_t$ given $x_t$ and $b_{t-1}$
 $$
 p(y_t|x_t, D_{1:t-1})= \text{PredictObs}(b_{t-1}, x_t)
 $$
 
 
-Goal 2: update belief state given output $y_t$:
+Goal 2: Recursively update belief state given output $y_t$ (aka "Bayesian filtering"):
 $$
 b_t = \text{UpdateBel}(b_{t-1}, x_t, y_t)
 $$
@@ -1027,7 +1028,7 @@ $$
 
 ----
 
-## Contextual bandit shootout (MNIST)<sup>1</sup>
+## Neural bandit shootout (MNIST)<sup>1</sup>
 
 ![bandits](./figs/mnist-bandits.png){style="max-width: 70%" .horizontal-center}
 
@@ -1060,31 +1061,31 @@ where $f^*$ is the unknown "reward" function.
 ## BayesOpt using Gaussian Process + UCB
 
 We approximate posterior over functions
-$p(f|D_{1:t})$ using a Gaussian Process
+$p(f|D_{1:t})=N(\cdot|\mu_t,\Sigma_t)$ using a Gaussian Process
 with  kernel function $K(x,x')$.
 
 Posterior predictive at step $t$:
 $$
 \begin{aligned}
-p(f(x_t)|D_{1:t-1}) &=
-N(\cdot | \mu_t(x_t), \sigma_t(x_t)) \\
-\mu_t(x_t) &=
-k_{t,1:t-1}^\intercal (K_{1:t-1,1:t-1} + \sigma^2 I)^{-1} (y_{1:t-1} - \mu_{1:t-1}) \\
-\sigma_t(x_t) &= k_{t,t} - k_{t,1:t}^\intercal
-(K_{1:t-1,1:t-1} + \sigma^2 I)^{-1} k_{t,1:t}
+p(f(x_*)|D_{1:t}) &=
+N(\cdot | \mu_t(x_*), \sigma_t(x_*)) \\
+\mu_t(x_*) &=
+k_{*,1:t}^\intercal (K_{1:t,1:t} + \sigma^2 I)^{-1} (y_{1:t} - \mu_{1:t}) \\
+\sigma_t(x_*) &= k_{*,*} - k_{*,1:t}^\intercal
+(K_{1:t,1:t} + \sigma^2 I)^{-1} k_{*,1:t}
 \end{aligned}
 $$
-where $k_{t,1:t-1}=(K(x_t,x_1), \ldots, K(x_t,x_{1:t-1}))$,
-and $k_{t,t}=K(x_t,x_t)$.
+where $k_{*,1:t}=(K(x_*,x_1), \ldots, K(x_*,x_{1:t}))$,
+and $k_{*,*}=K(x_*,x_*)$.
 
 UCB rule:
 $$
-x_t = \argmax_x \mu_t(x) + c \sigma_t(x)
+x_{t+1} = \argmax_{x} \mu_t(x) + c \sigma_t(x)
 $$
 
 ----
 
-## BayesOpt in 1d using GP + UCB + exact Bayes
+## BayesOpt in 1d using GP + UCB 
 
 
 ![bandits](./figs/bo-nando.png){style="max-width: 50%" .horizontal-center}
@@ -1096,8 +1097,9 @@ $$
 
 Instead of using GPs, we would like to use neural networks.
 This means
-We approximate $f^*$  by $f_{\theta}$,
-and need to perform Bayesian inference $p(\theta|D_{1:t-1})$,
+we approximate $f^*$  by $f_{\theta}$,
+and need to perform sequential Bayesian inference
+to compute $p(\theta|D_{1:t})$
 using e.g., BONG.
 
 Once we have the posterior,
@@ -1105,10 +1107,10 @@ we sample parameters from it, plug them into the function,
 and then find its maximum (using gradient-based methods):
 $$
 \begin{aligned}
-\tilde{\theta}_t &\sim p(\theta|D_{1:t-1}) \\
-x_t &= \arg \max_{x}  f_{\tilde{\theta}_t}(x) \\
-D_t &= (x_t, f^*(x_t)) \\
-p(\theta|D_{1:t}) &= \text{UpdateBel}(p(\theta|D_{1:t-1}),  D_t)
+\tilde{\theta}_t &\sim p(\theta|D_{1:t}) \\
+x_{t+1} &= \arg \max_{x}  f_{\tilde{\theta}_t}(x) \\
+D_{t+1} &= (x_{t+1}, f^*(x_{t+1})) \\
+p(\theta|D_{1:t+1}) &= \text{UpdateBel}(p(\theta|D_{1:t}),  D_{t+1})
     \end{aligned}
 $$
 
@@ -1256,6 +1258,31 @@ Provably robust --- can bound the posterior influence function (see paper).
 
 <img class="horizontal-center" width=75%
      src="/attachment/27222fee22ea59e8ff7e133f22f0e38c.gif">
+
+---
+layout: two-cols
+---
+
+
+## Example: robust EWMA <sup>1</sup>
+
+
+![ewma-data](./figs/dji-returns.png){}
+
+::right::
+
+![ewma](./figs/ewma-wolf.png){}
+
+
+
+ 
+<Footnotes separator x>
+    <Footnote :number=1>
+    https://grdm.io/posts/wolf-ewma,
+    Gerardo Duran-Martin, 2024.
+    </Footnote>
+</Footnotes>
+
 
 ---
 
