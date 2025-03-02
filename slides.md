@@ -13,19 +13,44 @@ coverDate: 2025-03-12
 
 Kevin Murphy (Google DeepMind)
 
-Joint work with: Gerardo Duran-Martin (QMU), Alexander Shestopaloff (QMU),
-Leandro Sánchez-Betancourt (OMI), Peter Chang (MIT), Matt Jones (U. Colorado)
-
-
 [khipu.ai](https://khipu.ai/khipu2025/program-2025)
 
 
 
 ---
 
-# Sequential online learning and prediction
+# What: Sequential decision making
 
-Observe sequence of features $x_i$ and observations $y_i$:
+Observe sequence of past states $s_i$, actions $a_i$ and rewards $r_i$:
+
+$$
+    {\cal D}_{1:t-1} = \{(s_1, a_1, r_1), \ldots, (s_{t-1}, a_{t-1}, r_{t-1})\}.
+$$
+
+
+Given new state $s_{t}$ (and past ${\cal D}_{1:t-1})$,
+choose action $a_t$  using some decision rule / policy
+
+$$
+    \hat{a}_{t} = \pi_{t}(s_{t}, {\cal D}_{1:t-1}).
+$$
+
+Receive reward
+$$
+  r_t = R(s_t, \hat{a}_{t})
+$$
+
+Repeat
+
+Goal: (efficiently) update policy $\pi_t$ so as to maximize
+the expected sum of rewards, $\sum_t E[r_t]$.
+
+
+---
+
+# Example: online supervised learning
+
+Observe sequence of features (inputs) $x_i$ and labels (outputs) $y_i$:
 
 $$
     {\cal D}_{1:t-1} = \{(x_1, y_1), \ldots, (x_{t-1}, y_{t-1})\}.
@@ -33,7 +58,8 @@ $$
 
 
 Given new input $x_{t}$ (and past ${\cal D}_{1:t-1})$,
-predict the output $y_t$ using some decision rule
+predict the output $y_t$ using some predictor
+
 
 $$
     \hat{y}_{t} = \pi_{t}(x_{t}, {\cal D}_{1:t-1}).
@@ -41,18 +67,18 @@ $$
 
 Incur loss
 $$
-  \ell_t = {\cal L}(y_t, \hat{y}_{t})
+  \ell_t = \ell(y_t, \hat{y}_{t})
 $$
 
-Repeat
 
-Goal: (efficiently) update predictor/policy $\pi_t$ so as to minimize
+Goal: (efficiently) update predictor $\pi_t$ so as to minimize
 the expected sum of losses, $\sum_t E[\ell_t]$.
+
 
 ---
 
 
-## Example: Sequential binary classification
+# Online binary classification of 2d inputs
 
 
 ![moons-snapshot](./figs/moons-snapshot-gerardo.png){.centered}
@@ -60,28 +86,42 @@ the expected sum of losses, $\sum_t E[\ell_t]$.
 
 ---
 
-## Outline
+
+# How: Generalized Online Variational Bayes
+
 
 - Background
-- BONG/ LOFI
-- Bandits
-- BONE
+  - Bayesian decision theory
+  - Online Bayesian inference
+  - Variational Bayes
+  - Generalized Bayes
+- Algorithms 1: low-rank filtering
+- Application 1: Bandits
+- Application 2: Bayesian optimization
+- Algorithms 2: robust filtering 
+
+---
+
+## Bayesian decision theory  101
+
+At each step $t$, pick action that maximizes expected utility /
+minimizes expected loss
+$$
+\begin{aligned}
+\hat{a}_t &= \arg \min_a   E[\ell(z_t, a) |  D_{1:t-1}] 
+\end{aligned}
+$$
+where $z_t$ is the unknown "state of nature"
+(e.g., class label, parameter),
+and $D_{1:t-1}$ is all data available up to decision time
 
 
 ---
 
-## Optimal prediction using Bayesian decision theory 
+## Example: classification
 
-For $\ell_2$ loss (regression), use posterior mean
-$$
-\begin{aligned}
-\hat{y}_t &= \arg \min_{a} E[\ell_2(y_t, a) | x_t, D_{1:t-1}] \\
- &= \arg \min_{a} \int p(y_t|x_t, D_{1:t-1}) (y_t-a)^2 dy_t \\
- &= E[y_t|x_t,D_{1:t-1}]
-\end{aligned}
-$$
-
-For $\ell_{01}$ loss (classification), use posterior mode
+For $\ell_{01}$ loss (classification), optimal estimator
+uses posterior mode (MAP estimate)
 $$
 \begin{aligned}
 \hat{y}_t &= \arg \min_a E[\ell_{01}(y_t, a) | x_t, D_{1:t-1}] \\
@@ -91,38 +131,75 @@ $$
 \end{aligned}
 $$
 
-In general,  $\hat{y}_t = f(p(y_t|x_t, D_{1:t-1}))$
+For $\ell_{01}$, we assume cost of false positives = cost of false negatives = 1
+$$
+\begin{array}{c|cc}
+ & \hat{y}=0 & \hat{y}=1  \\ \hline
+ y=0 & 0 & \ell_{FP}  \\
+ y=1 & \ell_{FN} & 0
+ \end{array}
+$$
 
 
 ---
 
-## Generative model
+## Example: regression
 
-Optimal predictor: $\hat{y}_t = f(p(y_t|x_t, D_{1:t-1}))$
+For $\ell_2$ loss (regression), optimal estimator
+uses posterior mean
+$$
+\begin{aligned}
+\hat{y}_t &= \arg \min_{a} E[\ell_2(y_t, a) | x_t, D_{1:t-1}] \\
+ &= \arg \min_{a} \int p(y_t|x_t, D_{1:t-1}) (y_t-a)^2 dy_t \\
+ &= E[y_t|x_t,D_{1:t-1}]
+\end{aligned}
+$$
 
-Use parametric model $p(y_t|x_t,\theta_t)$
-where $\theta_t$ summarizes $D_{1:t-1}$.
 
+
+
+
+
+---
+
+## Online/ Sequential/ Recursive Bayesian inference
+
+State Space Model (SSM)
 
 ![linreg](./figs/SSM.png){style="max-width: 50%" .horizontal-center}
 
+Input: prior belief state $b_{t-1}=p(\theta_{t-1}|D_{1:t-1})$,
+where parameters $\theta_{t-1}$ summarize $x_i \rightarrow y_i$
+
+Goal 1: Predict next output $y_t$ given $x_t$ and $D_{1:t-1}$
+$$
+p(y_t|x_t, D_{1:t-1})= \text{PredictObs}(b_{t-1}, x_t)
+$$
+
+
+Goal 2: update belief state given output $y_t$:
+$$
+b_t = \text{UpdateBel}(b_{t-1}, x_t, y_t)
+$$
 
 ---
 
-## Sequential Bayesian inference
+## Predict-Update cycle
+
 
 
 One step ahead  predictive distribution (for unknown $y_t$)
 $$
 \begin{aligned}
 \underbrace{p(\theta_t|D_{1:t-1})}_\text{param. predictive}
- &= \int \underbrace{p(\theta_t|\theta_{t-1})}_\text{dynamics}
+ &= b_{t|t-1} = \text{PredictParams}(b_{t-1})
+ = \int \underbrace{p(\theta_t|\theta_{t-1})}_\text{dynamics}
  \underbrace{p(\theta_{t-1}|D_{1:t-1})}_\text{previous posterior}
  d\theta_{t-1}
 \\
 \underbrace{p(y_t|x_t, D_{1:t-1})}_\text{obs. predictive}
-&=
-     \int
+&= p_{t|t-1} = \text{PredictObs}(b_{t|t-1}, x_t)
+=     \int
     \underbrace{p(y_t | \theta_t, x_{t})}_\text{likelihood}
     \underbrace{p(\theta_t |D_{1:t-1})}_\text{param. predictive}
     d\theta_t
@@ -134,33 +211,60 @@ New posterior (after seeing $y_t$):
 $$
 \begin{aligned}
 \overbrace{p(\theta_t|D_{1:t})}^\text{posterior}
-&=
+&= b_t =
 p(\theta_t|x_t,y_t,D_{1:t-1})
-=\frac{
+= \text{UpdateBel}(b_{t|t-1}, x_t, y_t) \\
+&=
+\frac{
 \overbrace{p(y_t|\theta_t,x_t)}^\text{likelihood}
 \overbrace{p(\theta_t|D_{1:t-1})}^\text{prior}}
-{p(y_t|x_t,D_{1:t-1})} \\
-\overbrace{p(y_t|x_t,D_{1:t-1})}^\text{marg. likelihood} &=
-\int p(y_t|\theta_t,x_t) p(\theta_t|D_{1:t-1}) d\theta_t
+{
+\underbrace{p(y_t|x_t,D_{1:t-1})}_{\text{marg. lik.}}
+}
+=
+\frac{
+p(y_t|\theta_t,x_t)
+p(\theta_t|D_{1:t-1})}
+{\int p(y_t|\theta_t,x_t) p(\theta_t|D_{1:t-1}) d\theta_t}
 \end{aligned}
 $$
 
 
 
+---
+
+##  Gaussian State Space Model (SSM)
+
+![linreg](./figs/SSM.png){style="max-width: 50%" .horizontal-center}
+
+Measurements  $\bm y_t \in \R^d$ are modelled by an unobserved (latent) state process $\bm\theta_t \in \R^p$:
+
+$$
+\begin{aligned}
+p(\bm\theta_t \vert  \bm\theta_{t-1}) &= {\cal N}(\bm\theta_t \vert f_t(\bm\theta_{t-1}), {\bf Q}_t),\\
+p(\bm y_t \vert \bm\theta_t) &= {\cal N}(\bm y_t \vert h_t(\bm\theta_t), {\bf R}_t).
+\end{aligned}
+$$
+
+
+- ${\bf Q}_t$ the state covariance,
+- ${\bf R}_t$ the measurement covariance,
+- $f_t: \R^p \to \R^p$ the state-transition function, and
+- $h_t: \mathbb{R}^p \to \mathbb{R}^d$ the measurement function.
 
 ---
 
-## Measurement (observation) model
+## Likelihood model (for the observations)
 
-Linear Gaussian model (with measurement noise cov. $R_t$)
+Linear Gaussian likelihood (with measurement noise cov. $R_t$)
 $$
     p_t(y_t|\theta_t) = N(y_t|H_t \theta_t, R_t)
 $$
 
 
-Special case: Linear Regression ($H_t = x_t^\intercal$):
+Nonlinear Gaussian likelihood
 $$
-    p(y_t|\theta_t, x_t) = N(y_t|x_t^\intercal \theta_t, R_t)
+    p(y_t|\theta_t, x_t) = N(y_t|h(\theta_t, x_t), R_t)
 $$
 
 Binary logistic Regression
@@ -216,15 +320,15 @@ $$
 
 ---
 
-## Turning the Bayesian crank: Predict step
+## Predict step (parameters)
 
-Gaussian ansatz
+Gaussian ansatz for the previous posterior
 $$
 p(\theta_{t-1}|D_{1:t-1})
 = N(\theta_{t-1}|\mu_{t-1},\Sigma_{t-1})
 $$
 
-Compute prior from previous posterior
+Previous posterior becomes new prior
 $$
 \begin{aligned}
 p(\theta_t|D_{1:t-1})
@@ -250,7 +354,39 @@ $$
 
 ---
 
-## Turning the Bayesian crank: Update step
+## Predict step (observations)
+
+
+Prior predictive
+$$
+\begin{aligned}
+p(y_t|x_t,D_{1:t-1})
+ &= \int p(y_t|x_t, \theta_t)
+ p(\theta_t|D_{1:t-1}) d\theta_{t} 
+\end{aligned}
+$$
+For nonlinear likelihoods, often approximated by Monte Carlo:
+$$
+\begin{aligned}
+p(y_t|x_t,D_{1:t-1})
+ &\approx \int p(y_t|x_t,\theta_t)
+ \left[ \frac{1}{K} \sum_{k=1}^K \delta(\theta_t-\theta_t^k) \right]
+d\theta_t \\
+ &\approx \frac{1}{K} \sum_{k=1}^K p(y_t|x_t, \theta_t^k),
+\;\; \theta_t^k \sim p(\theta_t|D_{1:t-1})
+\end{aligned}
+$$
+For linear likelihoods, can derive predictive in closed form:
+$$
+\begin{aligned}
+p(y_t|x_t,D_{1:t-1})
+ &=N(y_t|H_t \mu_{t|t-1}, \Sigma_{t|t-1} + R_t)
+\end{aligned}
+$$
+
+---
+
+## Update step
 
 New posterior (after seeing $y_t$):
 $$
@@ -268,27 +404,47 @@ Focus of this talk: how to compute this posterior efficiently
 
 If  we have LG dynamics and LG observations, get closed form solution!
 
-
-Predict step:
+**Predict step**
 $$
 \begin{aligned}
-p(\theta_t|D_{1:t-1})
-  &= N(\theta_t|\mu_{t|t-1}, \Sigma_{t|t-1}) \\
-\mu_{t|t-1} &= F_t \mu_{t-1} + b_t \\
-\Sigma_{t|t-1} &= F_t \Sigma_{t-1} F_t^\intercal + Q_t 
+\bm\Sigma_{t|t-1} &= {\bf F}_t^\intercal\bm\Sigma_{t-1}{\bf F}_t + {\bf Q}_t\\
+\bm\mu_{t|t-1} &= {\bf F}_t\bm\mu_{t-1} \\
+\hat{\bm y}_t &= {\bf H}_t\bm\mu_{t|t-1}\\
 \end{aligned}
 $$
 
-Update step:
+**Update step**
 $$
 \begin{aligned}
-p(\theta_t|D_{1:t})  &= N(\theta_t|\mu_{t}, \Sigma_{t}) \\
-\Sigma_{t}^{-1} &= \Sigma_{t|t-1}^{-1} + H_t^\intercal R_t^{-1} H_t \\
-\mu_{t|t-1} &= \mu_{t|t-1} + K_t(y_t - \hat{y}_t) \\
-\hat{y}_t &= h(\mu_{t|t-1},x_t) = H_t \mu_{t|t-1} \\
-K_t &= \Sigma_t H_t R_t^{-1}
+
+{\bf S}_t &= {\bf H}_t\bm\Sigma_{t|t-1}{\bf H}_t^\intercal + {\bf R}_t \\
+
+{\bf K}_t &= \bm\Sigma_{t|t-1}{\bf H}_t^\intercal{\bf S}_t^{-1}\\
+
+\bm\mu_t &=
+\bm\mu_{t|t-1} + {\bf K}_t({\bm y}_t - \hat{\bm y}_t)\\
+
+\bm\Sigma_t &=
+\bm\Sigma_{t|t-1} - {\bf K}_t{\bf S}_t{\bf K}_t^\intercal
 \end{aligned}
 $$
+
+
+
+---
+layout: two-cols
+---
+
+
+## KF for tracking 2d object
+
+
+![kf-tracking-eqns](./figs/SSM-eqns-2d-tracking.png){}
+
+::right::
+
+![kf-tracking](./figs/KF-2d-tracking.png){}
+
 
 
 ---
@@ -297,23 +453,8 @@ $$
 ## KF for tracking 2d object
 
 
-
-![kf-tracking-eqns](./figs/SSM-eqns-2d-tracking.png){style="max-width: 70%" .centered}
-
-
----
-
-
-## KF for tracking 2d object
-
-$y_t \sim N(\cdot|\theta^{1:2}, \sigma^2 I)$.
-
-Plot $y_t$ and $p(\theta^{1:2}|y_{1:t})$ for each step $t$.
-
-
-![kf-tracking](./figs/KF-2d-tracking.png){style="max-width: 30%" .centered}
-
-
+<img class="horizontal-center" width=500
+     src="/attachment/b9809328fd8bed9621d4a7f20821ced7.gif">
 
 ---
 
@@ -329,34 +470,100 @@ Right: Plot $\sqrt{\frac{1}{t} \sum_{i=1}^t (\hat{y}_{i|1:i-1} - y_i)^2}$ vs $t$
 
 ---
 
-## General case: use variational infernece
+## KF for online nonlinear regression - how?
 
-Batch version: Minimize KL from true posterior $p(\theta|D)$
-to approximate posterior $q_{\psi}(\theta)$
+$y_t|x_t \sim N(\cdot|h(\theta,  x_t), \sigma^2)$ where $h$ is MLP:
+
+$h(\theta,x_t) = \theta^{(3)}\,\sigma \Big(\theta^{(2)}\,
+\sigma \left(\theta^{(1)}{\bf x}_t + b^{(1)}\right) + b^{(2)}\Big) + b^{(3)}$ 
+
+
+<img class="horizontal-center" width=500
+     src="/attachment/1e9c7bc1936b8d406c0d6fe557d7666f.gif">
+
+
+---
+
+## Extended Kalman filter (EKF)
+For non-linear state and/or measurement functions.
+Replace functions with first-order approximations centred around previous mean.
 $$
 \begin{aligned}
-\psi &= \arg \min_{\psi} KL(q_{\psi}(\theta) |
-\frac{1}{Z} p_0(\theta) p(D|\theta)) \\
-&= \arg \max_{\psi} L^\text{ELBO}(\psi) + \text{const} \\
-L^\text{ELBO}(\psi) &=
-\underbrace{E_{\theta \sim q_{\psi}}
-[\log p(D|\theta)]}_\text{ELL}
--
-\underbrace{KL(q_\psi | p_0)}_\text{regularizer}
+p(\bm\theta_t \vert  \bm\theta_{t-1}) &= {\cal N}(\bm\theta_t \vert \bar f_t(\bm\theta_{t-1}), {\bf Q}_t)\\
+p(\bm y_t \vert \bm\theta_t) &= {\cal N}(\bm y_t \vert \bar h_t(\bm\theta_t), {\bf R}_t) 
 \end{aligned}
 $$
-where $L^\text{ELBO}$ is evidence lower bound.
+
+with
+
+- $\bar f_t(\bm\theta_{t-1}) = f(\bm\mu_{t-1}) + {\bf F}_t(\bm\theta_{t-1} - \bm\mu_{t-1})$,
+- $\bar h_t(\bm\theta_t) = h_t(\bm\mu_{t|t-1}) + {\bf H}_t(\bm\theta_t - \bm\mu_{t|t-1})$,
+- ${\bf F}_t = \text{Jac}(f_t)(\bm\mu_{t-1})$, ${\bf H}_t = \text{Jac}(h_t)(\bm\mu_{t|t-1})$
+
+---
+
+## Variational inference
+
+Exact posterior
+$$
+\begin{aligned}
+p(\theta|D) =
+\frac{1}{p(D)} p_0(\theta) p(D|\theta)) 
+\end{aligned}
+$$
+
+Approximate posterior: 
+$$
+\begin{aligned}
+q_{\psi^*}(\theta) &\approx p(\theta|D) \\
+\psi^*
+&= \arg \min_{\psi} KL(q_{\psi}(\theta) | p(\theta|D)) \\
+&= \arg\min_{\psi} E_{q_{\psi}(\theta)}\left[ \log q_{\psi}(\theta) -
+\log ( \frac{p(\data|\theta) p_0(\theta)}{\cancel{p(\data)}} ) \right] \\
+&= \arg\min_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta)
+- \log p_0(\theta) + \log q_{\psi}(\theta) \right]}_{\text{NELBO}} \\
+&= \arg\min_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta) \right]}_{\text{ENLL}}
++\underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
+\end{aligned}
+$$
+
+---
+
+
+
+## Variational inference
+
+
+$$
+\begin{aligned}
+q_{\psi^*}(\theta) &\approx p(\theta|D) \\
+\psi^*
+&= \arg\min_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta) \right]}_{\text{ENLL}}
++\underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
+\end{aligned}
+$$
+
+![VI](./figs/VI.png){style="max-width: 50%" .horizontal-center}
+
+---
+
+
+## Online variational inference
+
 
 Online version
 $$
 \begin{aligned}
 \psi_t
-&= \arg \max_{\psi} L_t^\text{ELBO}(\psi) \\
-L_t^\text{ELBO}(\psi) &=
+&= \arg \min_{\psi} L_t^\text{NELBO}(\psi) \\
+L_t^\text{NELBO}(\psi) &=
 \underbrace{E_{\theta \sim q_{\psi}}
 [-\log p(y_t|h_t(\theta_t))]}_\text{incremental E[NLL]}
 +
-\underbrace{KL(q_\psi | q_{\psi_{t|t-1}})}_\text{recursive
+\underbrace{KL(q_\psi | q_{\psi_{t|t-1}})}_\text{incremental
 regularizer}
 \end{aligned}
 $$
@@ -364,30 +571,103 @@ $$
 
 ---
 
-## Our approach: BONG and LOFI
+## Our contributions: faster algorithms for online VI
 
-- "Bayesian online natural gradient" (BONG).
-Matt Jones, Peter Chang, Kevin Murphy.
-NeurIPS 2024.
+- "Efficient Online Bayesian Inference for Neural Bandits".  
+Gerardo Duran-Martin, Aleyna Kara, Kevin Murphy.  
+AISTATS 2022.
 
--  "Low-rank extended Kalman filtering for online learning of neural
-    networks from streaming data'' (LOFI).
-    Peter Chang,  Gerardo Duran-Martin, Alex Shestopaloff, Matt Jones, Kevin Murphy.
+-  "Low-rank EKF for online learning of neural
+    networks from streaming data'' (LOFI).  
+    Peter Chang,  Gerardo Duran-Martin, Alex Shestopaloff, Matt Jones, Kevin Murphy.  
     COLLAS 2023.
 
-Contributions:
-- C1. Simplified one-step version of Bayesian Learning Rule (Khan and Rue, 2023).
-- C2. Faster (deterministic) way to compute (the gradient of) the objective.
-- C3. Faster diagonal plus low-rank (DLR) variational posterior (LOFI).
-- C4. Unifying framework (and experimental comparison)
-    for many previous methods.
+- "Bayesian online natural gradient" (BONG).  
+Matt Jones, Peter Chang, Kevin Murphy.  
+NeurIPS 2024.
+
+- "Low-rank Kalman filtering" (LRKF).  
+Gerardo Duran-Martin, Leandro Sánchez-Betancourt, Kevin Murphy.  
+(WIP).
 
 ---
 
-## C1. From BLR to BONG
+
+## Bayes By Backprop (BBB)  <sup>1</sup>
+
+BBB
+uses multiple iterations of gradient descent (GD)
+on the ELBO objective:
+$$
+\begin{aligned}
+\psi_{i} &=
+\psi_{i-1} + \alpha 
+\nabla_{\psi_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
+ L^\text{ELBO}(\psi_{i}) &=
+    E_{q_{\psi_{i}}}[
+    \log p(\data \vert \theta)]
+    -KL(q_{\psi_{i}} | p_{0})
+\end{aligned}
+$$
+It also uses a diagonal Gaussian (mean field) variational posterior,
+which is not very expressive.
+
+<Footnotes separator x>
+    <Footnote :number=1>
+ "Weight Uncertainty in Neural Networks",
+ Charles Blundell, Julien Cornebise, Koray Kavukcuoglu, Daan Wierstra,
+ ICML 2015.
+    </Footnote>
+</Footnotes>
+
+
+---
+
+## Bayesian Learning Rule (BLR) <sup>1</sup>
+
 
 BLR uses multiple iterations
 of natural gradient ascent (NGD)  on the ELBO:
+$$
+\begin{aligned}
+\psi_{i} &=
+\psi_{i-1} + \alpha F_{\psi_0}^{-1}
+\nabla_{\psi_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
+&= \psi_{t,i-1} + \alpha 
+\nabla_{\rho_{i-1}} L^\text{ELBO}(\psi_{i-1}) \\
+ L^\text{ELBO}(\psi_{i}) &=
+    E_{q_{\psi_{i}}}[
+    \log p(\data \vert \theta)]
+    -KL(q_{\psi_{i}} | p_{0})
+\end{aligned}
+$$
+where the Fisher information matrix is give by
+$$
+F_{\psi}^{-1} \nabla_{\psi} L(\psi) = \nabla_{\rho} L(\rho)
+$$
+where $\psi$ are natural parameters and $\rho$
+are moment parameters of the exponential family.
+For a Gaussian, these are
+$$
+\begin{aligned}
+\rho &= (\mu, \Sigma) \\
+\psi &= (\Sigma^{-1} \mu, -\frac{1}{2} \Sigma^{-1})
+\end{aligned}
+$$
+
+<Footnotes separator x>
+    <Footnote :number=1> 
+    "The Bayesian Learning Rule",  M. Khan and H. Rue, JMLR 2023
+    </Footnote>
+</Footnotes>
+
+
+
+---
+
+## From online BLR to BONG <sup>1</sup>
+
+Online BLR:
 $$
 \begin{aligned}
 \psi_{t,i} &=
@@ -401,17 +681,13 @@ $$
     -KL(q_{\psi_{t,i}} | q_{\psi_{t \vert t-1}})
 \end{aligned}
 $$
-where $\psi$ are natural parameters and $\rho$
-are moment parameters.
-(Recall that
-$F_{\psi}^{-1} \nabla_{\psi} L(\psi) = \nabla_{\rho} L(\rho)$.)
 
 
 In BONG,
 we initialize with $\psi_{t,0}=\psi_{t|t-1}$,
-and just do one step,
-so  the KL term vanishes,
-but we still have  implicit regularization due to initialization
+and just do one step of gradient ascent (so $i=0$).  
+Thus   the KL term vanishes,
+but we still have  *implicit regularization* due to initialization
 at prior:
 $$
 \begin{aligned}
@@ -426,44 +702,41 @@ $$
 Theorem: This is exact in the conjugate case
 (eg. Gaussian prior, linear Gaussian likelihood).
 
+<Footnotes separator x>
+    <Footnote :number=1>
+ "Bayesian online natural gradient".
+Matt Jones, Peter Chang, Kevin Murphy.  
+NeurIPS 2024.
+    </Footnote>
+</Footnotes>
+
+
 ---
 
 ## BONG vs BLR
 
 ![blr](./figs/blr-bong-cartoon2.png){style="max-width: 50%" .centered}
 
----
 
-## BONG vs BBB
-
-Bayes By Backprop (Blundell et al, 2015)
-is similar to BLR
-but uses GD (not NGD) on the ELBO objective:
-$$
-\begin{aligned}
-\psi_{t,i} &=
-\psi_{t,i-1} + \alpha 
-\nabla_{\psi_{t,i-1}} L_t^\text{ELBO}(\psi_{t,i-1}) 
-\end{aligned}
-$$
-
-By contrast, BONG uses NGD and ELL objective.
-
-We also define "BOG" (Bayesian Online Gradient)
-variant of BONG which uses GD (not NGD) on E[LL] objective.
-$$
-\begin{aligned}
-\psi_{t,i} &=
-\psi_{t,i-1} + \alpha 
-\nabla_{\psi_{t,i-1}} L_t^\text{ELL}(\psi_{t,i-1}) 
-\end{aligned}
-$$
 
 ---
 
-## C2. Faster update
+## Computing the BONG updates
 
-Generic update rule for Gaussian variational family
+Recall
+$$
+\begin{aligned}
+\psi_{t} &=
+\psi_{t|t-1} + \alpha F_{\psi_{t|t-1}}^{-1}
+\nabla_{\psi_{t|t-1}} L_t^\text{ELL}(\psi_{t|t-1}) \\
+&= \psi_{t|t-1} + \alpha 
+\nabla_{\rho_{t|t-1}} L_t^\text{ELL}(\psi_{t|t-1}) \\
+ L_t^\text{ELL}(\psi) &=
+    E_{q_{\psi}(\theta_t)}[
+    \log p(y_{t} \vert h(x_t, \theta_{t}))]
+\end{aligned}
+$$
+For Gaussian  variational family, this becomes
 $$
 \begin{aligned}
 \mu_t &= \mu_{t|t-1} + \Sigma_t
@@ -557,30 +830,32 @@ $$
 
 ---
 
-## Combining the pieces
+## Efficient vs Expressive variational posteriors
 
-- 4 updates: (NGD,ELBO)=BLR, (NGD,ELL)=BONG, (GD,ELBO)=BBB, (GD,ELL)=BOG
-- 4 gradient/Hessian approximations: MC-HESS, LIN-HESS, MC-EF, LIN-EF
-- 16 combinations, but we rule out MC-HESS as too slow
-
-![tab](./figs/bong-table-small.png){style="max-width: 20%" .horizontal-center}
-
----
-
-## C3. Efficient variational family
-
-We use a Gaussian variational family
+For the posterior over $\theta_t \in R^P$, we assume
 $$
 q_{\psi_t}(\theta_t) = N(\theta_t | \mu_t, \Sigma_t)
 $$
 
-We parameterize the precision matrix as diagonal plus low rank
 
 |Name|Form|Complexity|
 |----|----|----------|
 Full rank | $(\mu,\Sigma)$ | $O(P^3)$
 Diagonal (mean field) | $(\mu,{\rm diag}(\sigma))$ | $O(P)$
-Diagonal+low rank (DLR) | $(\mu,({\rm diag}(\Upsilon)+W W^{\intercal})^{-1})$ | $O(P R^2)$ 
+LOFI<sup>1</sup>: Diag + Rank $L$ precision | $(\mu,({\rm diag}(\Upsilon)+W W^{\intercal})^{-1})$ | $O(P L^2)$
+LRKF<sup>2</sup>: Rank $L$ covariance | $(\mu,W W^{\intercal})$ | $O(P L^2)$ 
+
+<Footnotes separator x>
+    <Footnote :number=1>
+     "Low-rank Filtering",    Chang  et al.     COLLAS 2023.  
+    </Footnote>
+    <Footnote :number=2>
+"Low-Rank Kalman Filtering",
+Duran-Martin et al, WIP.
+    </Footnote>
+</Footnotes>
+
+
 
 ---
 
@@ -611,20 +886,9 @@ layout: two-cols
 
 ---
 
-## C4. Unified framework
-
-- 4 updates x 4 grad/Hess $g/G$ x 3 families $q$ = 48 methods
-- Covers many new / existing methods, e.g., BBB, VON, SLANG,
-    CM-EKF, VD-EKF, RVGA, LRVGA, LOFI
-- P: \# params, R: rank, M: \# MC, I: \# iter, C: output dim
-
-![predict-update](./figs/bong-table.png){style="max-width: 50%"}
-
----
-
 ## Example: two moons binary classification
 
-* Using a single hidden-layer neural network and  moment-matched (EKF) approx.
+* BONG  (full-rank) for learning 1 layer MLP.
 
 ![sequential classification with static dgp](./figs/moons-c-static.gif)
 
@@ -649,47 +913,42 @@ Expected calibration error
 
 ## Application:  multi-armed bandits
 
-![bandits](./figs/bandit-octopus.png){style="max-width: 30%"}
-
-----
-
-## From Bandits to Contextual  Bandits
+![bandits](./figs/bandit-octopus.png){style="max-width: 30%" .float-left}
 
 
-MAB
 $$
     \begin{aligned}
-      \arg \max_{a_{1:T}} & \sum_{t=1}^T E[R(a_t)] \\
-            R(a_t=k) & \sim N(\mu_k, \sigma_k^2) // \text{Gaussian bandit} \\
-            R(a_t=k) & \sim {\rm Bern}(\mu_k) // \text{Bernoulli bandit}
+      \arg \max_{a_{1:T}} & \sum_{t=1}^T E[R_{\theta}(a_t)] \\
+      	    R_{\theta}(a_t=k) & = \text{reward for taking action $k$ at time $t$}\\
+            R_{\theta}(a_t=k) & \sim N(\mu_k, \sigma_k^2) // \text{Gaussian bandit} \\
+            R_{\theta}(a_t=k) & \sim {\rm Bern}(\mu_k) // \text{Bernoulli bandit} \\
+	    a_t=k & \text{ means show ad $k$, prescribe drug $k$, etc}
     \end{aligned}
 $$
 
 
-CB
+
+----
+
+##  Contextual  Bandits
+
+
+Now the agent observes a state vector $s_t$ (e.g., web page features,
+patient features) at each step,
+which influences the reward $r_t$ it obtains for each action
+(e.g., ad, drug).
 $$
 \begin{aligned}
-      \arg \max_{\pi_{1:T}} & \sum_{t=1}^T E[R(s_t, \pi_t(s_t))] \\
-   R(s_t, a_t=k) & \sim N(w_k^\intercal s_t, \sigma_k^2)
+      \arg \max_{\pi_{1:T}} & \sum_{t=1}^T E[R_{\theta}(s_t, \pi_t(s_t))] \\
+   R_{\theta}(s_t, a_t=k) & \sim N(w_k^\intercal s_t, \sigma_k^2)
       // \text{linear regression} \\
-      R(s_t, a_t=k) & \sim {\rm Bern}(\sigma((w_k^\intercal s_t)))
+      R_{\theta}(s_t, a_t=k) & \sim {\rm Bern}(\sigma((w_k^\intercal s_t)))
       // \text{logistic regression}  \\
-      R(s_t,a_t=k) &\sim N(h(\theta,s_t,k), \sigma^2) 
+      R_{\theta}(s_t,a_t=k) &\sim N(h_{\theta}(s_t,k), \sigma^2) 
 //      \text{neural bandit}
       \end{aligned}
 $$
 
-----
-
-
-## Applications of  (Contextual)  Bandits
-
-|Application|State|Action|Reward|
-|---|---|---|---|
-Clinical trials | Patient features | Drug $1 \ldots K$ | Health outcome
-Recommender system| User/movie features  | Movie $1 \ldots K$ | Rating $1 \ldots 5$
-Advertising system| User/webpage features  | Ad $1 \ldots K$ | Click $0,1$
-BayesOpt | -  | Parameters $\theta \in R^D$ | Objective fn.
 
 ---
 
@@ -699,6 +958,10 @@ Need to try new actions (explore) to learn about their effects
 before exploiting the best action.
 
 ![explore-exploit](./figs/explore-exploit.png){style="max-width: 30%" .horizontal-center}
+
+Action at step $t$ depends on the uncertainty in the belief state $p(\theta|D_{1:t-1})$,
+where $D_i = (s_i,a_i,r_i)$ are the observations so far.
+
 
 ---
 zoom: 0.8
@@ -710,10 +973,13 @@ $$
 \begin{aligned}
  \pi_t(a^* | s_t) &= {\cal I}
  (a^* = \arg \max_{a} \mu_t(a) + c \sigma_t(a) )\\
-  \mu_t(a) &= E[R(s_t, a) | D_{1:t-1}] \\
-  \sigma_t(a) &= \sqrt{ Var(R(s_t, a) | D_{1:t-1} ) } 
+  \mu_t(a) &= E[R_{\theta}(s_t, a) | D_{1:t-1}] \\
+  \sigma_t(a) &= \sqrt{ Var(R_{\theta}(s_t, a) | D_{1:t-1} ) } 
 \end{aligned}
 $$
+Need to recursively update  belief state $p(\theta|D_{1:t-1})$
+to implement policy.
+
 
 ![UCB](./figs/UCB.png){style="max-width: 50%" .horizontal-center}
 
@@ -723,15 +989,22 @@ $$
 
 $$
 \begin{aligned}
-  \pi_t(a^*|s_t) &= p(a^* = \arg \max_{a} R(a, s_t) |D_{1:t-1}) \\
-  &= \int {\cal I}(a^* = \arg \max_{a} R(a, s_t; \theta) )
+  \pi_t(a^*|s_t) &= p(a^* = \arg \max_{a} R_{\theta}(a, s_t) |D_{1:t-1}) \\
+  &= \int {\cal I}(a^* = \arg \max_{a} R_{\theta}(a, s_t) )
     p(\theta|D_{1:t-1}) d\theta \\
   &\approx {\cal I}(a^* = \arg \max_{a})
-  R(a, x_t; \tilde{\theta}_t) ) \\
-  & \text{ where } \tilde{\theta}_t \sim p(\theta|D_{1:t-1})
+  R_{\tilde{\theta}_t}(a, s_t) ) ,  \;\; \tilde{\theta}_t \sim p(\theta|D_{1:t-1})
     \end{aligned}
 $$
 
+
+Algorithm:
+$$
+\begin{aligned}
+\tilde{\theta}_t &\sim p(\theta|D_{1:t-1}) \\
+a_t &= \arg \max_{a}  R_{\tilde{\theta}_t}(a, s_t) 
+    \end{aligned}
+$$
 
 
 ----
@@ -765,93 +1038,218 @@ $$
 </Footnotes>
 
 
+----
+
+## Application: Bayesian Optimization
+
+Global, gradient-free optmization of expensive black-box function $f^*(x)$:
+$$
+\begin{aligned}
+x^* = \arg \max_{\theta} f^*(x)
+\end{aligned}
+$$
+where $x \in R^P$ is the input (e.g., hyper-parameters of optimizer,
+or inputs to weather simulator).
+
+Equivalent to a MAB with infinite number of arms $x$,
+where $f^*$ is the unknown "reward" function,
+approximated by $f_{\theta}$.
+
+TS Algorithm for BO:
+$$
+\begin{aligned}
+\tilde{\theta}_t &\sim p(\theta|D_{1:t-1}) \\
+x_t &= \arg \max_{x}  f_{\tilde{\theta}_t}(x) \\
+D_t &= (x_t, f^*(x_t)) \\
+p(\theta|D_{1:t}) &= \text{UpdateBel}(p(\theta|D_{1:t-1}, D_t)
+    \end{aligned}
+$$
+
+----
+
+## BayesOpt in 1d using Gaussian Process + exact Bayes
 
 
----
+![bandits](./figs/bo-nando.png){style="max-width: 50%" .horizontal-center}
 
-## Changes in the data-generating process
-When more data does not lead to better performance.
+----
 
-- DGP $p_t(y_t|x_t)$ might change slowly or suddenly
-- Slow changes: sensor degrades, bandit/RL policy slightly updated
-- Sudden changes: shock to system due to news events (e.g. Covid, DeepSeek)
-- Need adaptive learning rules!
-
----
+## BayesOpt in 1d using MLP + LRKF <sup>1</sup>
 
 
-## Non-stationary moons dataset
-
-![non-stationary-moons-split](./figs/moons-dataset-split.png)
-
----
-
-## The full dataset (without knowledge of the task boundaries)
-
-![non-stationary-moons-full](./figs/moons-dataset-full.png){style="max-width: 50%" .horizontal-center}
-
----
-
-## Non-stationary moons using constant parameter assumption
-
-![sequential classification with varying dgp](./figs/changes-moons-c-static.gif)
-
----
-
-## BONE<sup>1</sup>
-
-- Hierarchical Bayesian model that allows $\theta_t$ to drift
-slowly within a "regime" (DGP $p(y_t|\theta_t, x_t)$),
-and then suddenly switch
-to a new "regime" (different DGP $p'(y_t|\theta_t, x_t)$)
-
-- Regime is specifed by a latent discrete indicator variable
-(auxiliary variable)
-
-- Subsumes prior work on changepoint models, etc.
+![bandits](./figs/bo-bnn-ackley.png){style="max-width: 70%" .horizontal-center}
 
 <Footnotes separator x>
     <Footnote :number=1>
-    "BONE: (B)ayesian (O)nline learning in (N)on-stationary (E)nvironments".
-    <br>
-    Gerardo Duran-Martin, Leandro Sánchez-Betancourt, Alexander Shestopaloff, and Kevin Murphy.
-    Arxiv, 2024.
+"Low-Rank Kalman Filtering",
+Duran-Martin et al, WIP.
     </Footnote>
 </Footnotes>
 
 
----
-
-## Hierarchical Bayesian model
-
-
-Switching State Space Model (SSM).
-
-![sssm](./figs/switching-SSM.png){style="max-width: 30%" .horizontal-center}
 
 ---
 
+# Robustifying  KF-like methods (BONG, etc)
 
-## BONE bakeoff
+Standard (variational) Bayes is sensitive to outliers and misspecified measurement models
+
+---
+
+## Example: 2d Tracking problem
+
+Measurements sampled from a Student-t distribution with 2.01 degrees of freedom.
+<img class="horizontal-center" width=500
+     src="/attachment/887c8cd1689889df9c7a6b29f1977fac.gif">
+
+---
+
+## Example: Sequential training of non-linear models
+
+Any measurement has 15% probability of taking value between -50 and 50.
+
+<img class="horizontal-center" width=500
+     src="/attachment/36ef70bb76373ec5358575a6807825f0.gif">
+
+---
 
 
-![comparison-sequential-classification](./figs/changes-moons-comparison.png)
+# Generalized Variational Bayesian inference <sup>1</sup>
+
+VI
+$$
+\begin{aligned}
+\psi^*
+&= \arg\min_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ -\log p(\data|\theta) \right]}_{\text{ENLL}}
++\underbrace{KL(q_{\psi}(\theta) | p_0(\theta))}_{\text{regularizer}}
+\end{aligned}
+$$
+
+GVI
+$$
+\begin{aligned}
+\psi^*
+&= \arg\min_{\psi}
+\underbrace{E_{q_{\psi}(\theta)}\left[ \ell(\theta|\data) \right]}_{\text{loss}}
++\underbrace{D(q_{\psi}(\theta) | p_0(\theta))}_{\text{divergence}}
+\end{aligned}
+$$
+
+<Footnotes separator x>
+    <Footnote :number=1>
+   "An Optimization-centric View on Bayes' Rule:
+   Reviewing and Generalizing Variational Inference".
+     Jeremias Knoblauch et al.
+     JMLR 2021.
+    </Footnote>
+</Footnotes>
+
+---
 
 
+# The weighted likelihood filter (WoLF)
 
+"Outlier-robust Kalman filtering through generalised Bayes".  
+Gerardo Duran-Martin, Matias Altamirano, Alexander Y Shestopaloff, Leandro Sanchez Betancourt, Jeremias Knoblauch, Matt Jones, François-Xavier Briol, Kevin Murphy.
+ICML 2024.
+
+Replace the log likelihood
+$\log {\cal N}(\bm y_t \vert h_t(\bm\theta_t), {\bf R}_t)$
+with loss function of the form
+$$
+\begin{aligned}
+\ell_t(\theta_t) &= -W_t(\bm y_{1:t})\,
+\log{\cal N}(\bm y_t \vert h_t(\bm\theta_t), {\bf R}_t).
+\end{aligned}
+$$
+Easy to modify KF-like methods, as we will show.
+
+---
+
+## WoLF for Gaussian SSMs
+
+For an LG-SSM, WoLF updates step is a simple modification of the KF update step.
+
+
+$$
+\begin{aligned}
+\hat{\bm y}_t &= {\bf H}_t\bm\mu_{t|t-1}\\
+
+{\bf S}_t &= 
+
+{\bf H}_t\bm\Sigma_{t|t-1}{\bf H}_t^\intercal + {\bf R}_t
+{\color{red}
+/ W_t(\bm y_{1:t})} \\
+
+{\bf K} &= \bm\Sigma_{t|t-1}{\bf H}_t^\intercal{\bf S}_t^{-1}\\
+
+\bm\mu_t &=
+\bm\mu_{t|t-1} + {\bf K}_t({\bm y}_t - \hat{\bm y}_t)\\
+
+\bm\Sigma_t &=
+\bm\Sigma_{t|t-1} - {\bf K}_t{\bf S}_t{\bf K}_t^\intercal
+\end{aligned}
+$$
+
+Can easily be generalized to EKF, BONG, etc.
+
+---
+
+## Our choice of weighting function: the IMQ
+
+Inverse multi-quadratic
+
+$$
+W_t({\bm y}_{1:t}) = \left(1 + \frac{\|\bm y_t - \hat{\bm y}_t\|_2^2}{c^2}\right)^{-1/2}
+$$
+with $c > 0$ the soft-threshold.
+
+Downweight "unlikely" observations, to avoid overcompensating.
+
+Provably robust --- can bound the posterior influence function (see paper).
+
+
+---
+
+## Example: 2d-tracking problem
+
+<img class="horizontal-center" width=75%
+     src="/attachment/27222fee22ea59e8ff7e133f22f0e38c.gif">
+
+---
+
+## Example:  Sequential training of neural networks
+
+<img class="horizontal-center" width=500
+     src="/attachment/b90056b22de044b15657d12ad3258d12.gif">
+
+
+---
+
+### Comparison to alternative methods
+Online training of neural networks in corrupted UCI datasets.
+
+<figure>
+<img class="horizontal-center" width=500
+     src="/attachment/1d5a92fed176545c125bc7e8f5661b84.png">
+<figcaption>
+     Results are shown relative to online gradient descent (OGD) with multiple inner iterations.
+</figcaption>
+</figure>
+
+    
 ---
 
 ## Summary and future work
 
 - Sequential Bayesian inference has many applications,
-from online learning to bandits.
+e.g., online learning, bandits, Bayes Opt.
 
 - We propose new efficient  (and deterministic) algorithms
-based on recursive variational inference and (low rank) Gaussian approximations
-(BONG/LOFI).
+based on recursive (generalized)
+variational inference and (low rank) Gaussian approximations.
 
--  Modeling non-stationarity is important in many applications,
-and can require additional modeling and algorithmic tricks
-(BONE).
 
-- Future work: applications to RL.
+- Future work: scale up to large neural networks,
+and applications to RL.
