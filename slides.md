@@ -83,7 +83,7 @@ the expected sum of losses, $\sum_t E[\ell_t]$.
 # Online binary classification of 2d inputs
 
 
-![moons-snapshot](./figs/moons-snapshot-gerardo.png){.centered}
+![moons-snapshot](./figs/moons-classifier-gerardo.png){.centered}
 
 
 ---
@@ -193,8 +193,8 @@ $$
 One step ahead  predictive distribution (for unknown $y_t$)
 $$
 \begin{aligned}
-\underbrace{p(\theta_t|D_{1:t-1})}_\text{param. predictive}
- &= b_{t|t-1} = \text{PredictParams}(b_{t-1})
+\underbrace{p(\theta_t|D_{1:t-1})}_\text{latent predictive}
+ &= b_{t|t-1} = \text{PredictLatent}(b_{t-1})
  = \int \underbrace{p(\theta_t|\theta_{t-1})}_\text{dynamics}
  \underbrace{p(\theta_{t-1}|D_{1:t-1})}_\text{previous posterior}
  d\theta_{t-1}
@@ -203,13 +203,13 @@ $$
 &= p_{t|t-1} = \text{PredictObs}(b_{t|t-1}, x_t)
 =     \int
     \underbrace{p(y_t | \theta_t, x_{t})}_\text{likelihood}
-    \underbrace{p(\theta_t |D_{1:t-1})}_\text{param. predictive}
+    \underbrace{p(\theta_t |D_{1:t-1})}_\text{latent predictive}
     d\theta_t
     \end{aligned}
 $$
 
 
-New posterior (after seeing $y_t$):
+New posterior over latent (after seeing $y_t$):
 $$
 \begin{aligned}
 \overbrace{p(\theta_t|D_{1:t})}^\text{posterior}
@@ -317,8 +317,10 @@ $$
 Shrink and Perturb (Ash and Adams, 2020):
 $$
 p(\theta_t | \theta_{t-1}) 
- = N(\theta_t|\theta_{t-1}, Q_t)
+ = N(\theta_t|\lambda \theta_{t-1}, \sigma I)
 $$
+where $0 < \lambda \leq 1$ is the shrink
+and $\sigma > 0$ is the perturb.
 
 ---
 
@@ -382,7 +384,7 @@ For linear likelihoods, can derive predictive in closed form:
 $$
 \begin{aligned}
 p(y_t|x_t,D_{1:t-1})
- &=N(y_t|H_t \mu_{t|t-1}, \Sigma_{t|t-1} + R_t)
+ &=N(y_t|H_t \mu_{t|t-1}, H \Sigma_{t|t-1} H^\intercal + R_t)
 \end{aligned}
 $$
 
@@ -409,7 +411,7 @@ If  we have LG dynamics and LG observations, get closed form solution!
 **Predict step**
 $$
 \begin{aligned}
-\bm\Sigma_{t|t-1} &= {\bf F}_t^\intercal\bm\Sigma_{t-1}{\bf F}_t + {\bf Q}_t\\
+\bm\Sigma_{t|t-1} &= {\bf F}_t \bm\Sigma_{t-1} {\bf F}_t^\intercal + {\bf Q}_t\\
 \bm\mu_{t|t-1} &= {\bf F}_t\bm\mu_{t-1} \\
 \hat{\bm y}_t &= {\bf H}_t\bm\mu_{t|t-1}\\
 \end{aligned}
@@ -460,11 +462,12 @@ layout: two-cols
 
 ---
 
-## KF for online linear regression
+## KF for online learning of static linear regression
 
-$y_t|x_t \sim N(\cdot|\theta^\intercal x_t, \sigma^2)$.
+$y_t|x_t \sim N(\cdot|\theta^\intercal x_t, \sigma^2)$,
+where $\theta_t=\theta$ is unknown but does not change.
 
-Left: Plot $E[\theta^{1:2}|y_{1:t}]$ vs $t$.
+Left: Plot $E[\theta_{1:2}|y_{1:t}]$ vs $t$.
 Right: Plot $\sqrt{\frac{1}{t} \sum_{i=1}^t (\hat{y}_{i|1:i-1} - y_i)^2}$ vs $t$
 
 
@@ -716,8 +719,8 @@ $$
 \nabla_{\theta_{t-1}} \log p(y_t|h(\theta_{t-1},x_t))
 \end{aligned}
 $$
-- No model of uncertainty.
-- Statistically inefficient.
+- No model of uncertainty (needed for decision making).
+- Statistically inefficient (needs lots of data).
 
 
 By contrast, BONG updates the variational parameters $\psi_t$ using natural gradient descent:
@@ -729,6 +732,8 @@ $$
     \log p(y_{t} \vert h(x_t, \theta_{t}))]
 \end{aligned}
 $$
+- Posterior $q_{\psi_t}(\theta_t)$ captures uncertainty.
+- Second-order updates enable more rapid updates in small data setting.
 
 ---
 
@@ -966,7 +971,7 @@ $$
 ## Exploration-Exploitation Tradeoff
 
 Need to try new actions (explore) to learn about their effects
-before exploiting the best action.
+before exploiting the best action (dual control problem).
 
 ![explore-exploit](./figs/explore-exploit.png){style="max-width: 30%" .horizontal-center}
 
@@ -1051,17 +1056,21 @@ $$
 
 ## Application: Bayesian Optimization
 
-Global, gradient-free optmization of expensive black-box function $f^*(x)$:
+Global, gradient-free optmization of expensive, black-box
+function
 $$
 \begin{aligned}
-x^* = \arg \max_{x} f^*(x)
+x^* = \arg \max_{x \in \mathcal{X}} f^*(x)
 \end{aligned}
 $$
-where $x \in \mathcal{X}$ is the input (e.g., hyper-parameters of model,
-or inputs to weather simulator).
+where
+$f^*$ is the unknown reward  / objective function.
 
-Equivalent to a MAB with infinite number of arms $x$,
-where $f^*$ is the unknown "reward" function.
+Equivalent to a MAB with one arm for each point in $\mathcal{X}$.
+
+Examples:
+- $f^*(x)$ is validation accuracy of hyper-parameters,  $\mathcal{X}=R^N$
+- $f^*(x)$ is binding affinity of DNA sequence, $\mathcal{X}=\{A,C,G,T\}^N$.
 
 
 ----
@@ -1198,11 +1207,8 @@ $$
 ---
 
 
-# The weighted likelihood filter (WoLF)
+# The weighted likelihood filter (WoLF) <sup>1</sup>
 
-"Outlier-robust Kalman filtering through generalised Bayes".  
-Gerardo Duran-Martin, Matias Altamirano, Alexander Y Shestopaloff, Leandro Sanchez Betancourt, Jeremias Knoblauch, Matt Jones, François-Xavier Briol, Kevin Murphy.
-ICML 2024.
 
 Replace the log likelihood
 $\log {\cal N}(\bm y_t \vert h_t(\bm\theta_t), {\bf R}_t)$
@@ -1214,6 +1220,15 @@ $$
 \end{aligned}
 $$
 Easy to modify KF-like methods, as we will show.
+
+<Footnotes separator x>
+    <Footnote :number=1>
+    "Outlier-robust Kalman filtering through generalised Bayes". 
+Duran-Martin, Altamirano, Shestopaloff, Betancourt, Knoblauch, Jones,
+Briol, Murphy.
+ICML 2024.
+    </Footnote>
+</Footnotes>
 
 ---
 
